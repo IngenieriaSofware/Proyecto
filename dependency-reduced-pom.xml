@@ -19,6 +19,19 @@
       <plugin>
         <groupId>org.javalite</groupId>
         <artifactId>activejdbc-instrumentation</artifactId>
+        <version>3.0</version>
+        <executions>
+          <execution>
+            <phase>process-classes</phase>
+            <goals>
+              <goal>instrument</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.javalite</groupId>
+        <artifactId>activejdbc-instrumentation</artifactId>
         <version>${activejdbc.version}</version>
         <executions>
           <execution>
