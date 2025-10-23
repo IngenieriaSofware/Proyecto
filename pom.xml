@@ -109,6 +109,21 @@
           </execution>
         </executions>
       </plugin>
+      
+
+      <plugin>
+  <groupId>org.javalite</groupId>
+  <artifactId>activejdbc-instrumentation</artifactId>
+  <version>3.0</version> <!-- O la versión que estés usando -->
+  <executions>
+    <execution>
+      <phase>process-classes</phase>
+      <goals>
+        <goal>instrument</goal>
+      </goals>
+    </execution>
+  </executions>
+</plugin>
 
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>

@@ -27,7 +27,7 @@ import com.is1.proyecto.models.User; // Modelo de ActiveJDBC que representa la t
  */
 public class App {
 
-    // Instancia estática y final de ObjectMapper para la serialización/deserialización JSON.
+    // Instancia estática y final de ObjectMapper para la seria|lización/deserialización JSON.
     // Se inicializa una sola vez para ser reutilizada en toda la aplicación.
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
