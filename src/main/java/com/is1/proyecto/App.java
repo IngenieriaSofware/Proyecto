@@ -5,7 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper; // Utilidad para serializar/
 import static spark.Spark.*; // Importa los métodos estáticos principales de Spark (get, post, before, after, etc.).
 
 // Importaciones específicas para ActiveJDBC (ORM para la base de datos)
+import com.is1.proyecto.models.Professor;
 import org.javalite.activejdbc.Base; // Clase central de ActiveJDBC para gestionar la conexión a la base de datos.
+import org.javalite.activejdbc.Model;
 import org.mindrot.jbcrypt.BCrypt; // Utilidad para hashear y verificar contraseñas de forma segura.
 
 // Importaciones de Spark para renderizado de plantillas
@@ -13,7 +15,9 @@ import spark.ModelAndView; // Representa un modelo de datos y el nombre de la vi
 import spark.template.mustache.MustacheTemplateEngine; // Motor de plantillas Mustache para Spark.
 
 // Importaciones estándar de Java
+import java.util.ArrayList;
 import java.util.HashMap; // Para crear mapas de datos (modelos para las plantillas).
+import java.util.List;
 import java.util.Map; // Interfaz Map, utilizada para Map.of() o HashMap.
 
 // Importaciones de clases del proyecto
@@ -292,6 +296,99 @@ public class App {
                 return objectMapper.writeValueAsString(Map.of("error", "Error interno al registrar usuario: " + e.getMessage()));
             }
         });
+        get("/professor/new", (req, res) -> {
+            Map<String, Object> model = new HashMap<>();
+
+            String successMessage = req.queryParams("message");
+            if (successMessage != null && !successMessage.isEmpty()) {
+                model.put("successMessage", successMessage);
+            }
+
+            String errorMessage = req.queryParams("error");
+            if (errorMessage != null && !errorMessage.isEmpty()) {
+                model.put("errorMessage", errorMessage);
+            }
+
+            // Verifica si el usuario está logueado antes de mostrar el formulario
+            Boolean loggedIn = req.session().attribute("loggedIn");
+            if (loggedIn == null || !loggedIn) {
+                res.redirect("/login?error=Debes iniciar sesión para agregar profesores.");
+                return null;
+            }
+
+            return new ModelAndView(model, "professor_form.mustache");
+        }, new MustacheTemplateEngine());
+
+// POST: guardar nuevo profesor
+        post("/professor/new", (req, res) -> {
+            String name = req.queryParams("name");
+            String email = req.queryParams("email");
+            String department = req.queryParams("department");
+            String phone = req.queryParams("phone");
+
+            if (name == null || name.isEmpty()) {
+                res.redirect("/professor/new?error=El nombre es obligatorio.");
+                return null;
+            }
+
+            try {
+                Professor p = new Professor();
+                p.set("name", name);
+                p.set("email", email);
+                p.set("department", department);
+                p.set("phone", phone);
+                p.saveIt();
+
+                res.redirect("/professor/new?message=Profesor agregado correctamente.");
+                return null;
+            } catch (Exception e) {
+                System.err.println("Error al agregar profesor: " + e.getMessage());
+                res.redirect("/professor/new?error=Error interno al agregar profesor.");
+                return null;
+            }
+        });
+
+        get("/professor/list", (req, res) -> {
+            Map<String, Object> model = new HashMap<>();
+
+            try {
+                Boolean loggedIn = req.session().attribute("loggedIn");
+                if (loggedIn == null || !loggedIn) {
+                    res.redirect("/login?error=Debes iniciar sesión para ver los profesores.");
+                    return null;
+                }
+
+                List<Model> rawProfessors = Professor.findAll(); // devuelve List<Model>
+                List<Map<String, Object>> professorsList = new ArrayList<>();
+
+                for (Model m : rawProfessors) {
+                    Professor p = (Professor) m; // cast seguro
+                    Map<String, Object> profData = new HashMap<>();
+                    profData.put("id", p.get("id"));
+                    profData.put("name", p.get("name"));
+                    profData.put("email", p.get("email"));
+                    profData.put("department", p.get("department"));
+                    profData.put("phone", p.get("phone"));
+                    professorsList.add(profData);
+                }
+
+                model.put("professors", professorsList);
+
+                // 👇 Log para ver si realmente trajo los datos
+                System.out.println("Profesores encontrados: " + professorsList.size());
+                professorsList.forEach(System.out::println);
+
+                return new ModelAndView(model, "professor_list.mustache");
+
+            } catch (Exception e) {
+                System.err.println("Error al listar profesores: " + e.getMessage());
+                e.printStackTrace();
+                res.redirect("/dashboard?error=No se pudieron cargar los profesores.");
+                return null;
+            }
+        }, new MustacheTemplateEngine());
+
+
 
     } // Fin del método main
 } // Fin de la clase App
