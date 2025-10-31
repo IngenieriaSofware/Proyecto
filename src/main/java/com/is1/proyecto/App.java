@@ -323,6 +323,7 @@ public class App {
         post("/professor/new", (req, res) -> {
             String name = req.queryParams("name");
             String email = req.queryParams("email");
+            String dni = req.queryParams("DNI");
             String department = req.queryParams("department");
             String phone = req.queryParams("phone");
 
@@ -331,9 +332,11 @@ public class App {
                 return null;
             }
 
+
             try {
                 Professor p = new Professor();
                 p.set("name", name);
+                p.set("DNI",dni);
                 p.set("email", email);
                 p.set("department", department);
                 p.set("phone", phone);
