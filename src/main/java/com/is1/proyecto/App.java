@@ -1,28 +1,30 @@
 package com.is1.proyecto; // Define el paquete de la aplicación, debe coincidir con la estructura de carpetas.
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 // Importaciones necesarias para la aplicación Spark
-import com.fasterxml.jackson.databind.ObjectMapper; // Utilidad para serializar/deserializar objetos Java a/desde JSON.
-import static spark.Spark.*; // Importa los métodos estáticos principales de Spark (get, post, before, after, etc.).
-
-// Importaciones específicas para ActiveJDBC (ORM para la base de datos)
-import com.is1.proyecto.models.Professor;
-import org.javalite.activejdbc.Base; // Clase central de ActiveJDBC para gestionar la conexión a la base de datos.
-import org.javalite.activejdbc.Model;
-import org.mindrot.jbcrypt.BCrypt; // Utilidad para hashear y verificar contraseñas de forma segura.
-
-// Importaciones de Spark para renderizado de plantillas
-import spark.ModelAndView; // Representa un modelo de datos y el nombre de la vista a renderizar.
-import spark.template.mustache.MustacheTemplateEngine; // Motor de plantillas Mustache para Spark.
-
-// Importaciones estándar de Java
-import java.util.ArrayList;
-import java.util.HashMap; // Para crear mapas de datos (modelos para las plantillas).
+import java.util.ArrayList; // Utilidad para serializar/deserializar objetos Java a/desde JSON.
+import java.util.HashMap; // Importa los métodos estáticos principales de Spark (get, post, before, after, etc.).
 import java.util.List;
-import java.util.Map; // Interfaz Map, utilizada para Map.of() o HashMap.
+import java.util.Map; // Clase central de ActiveJDBC para gestionar la conexión a la base de datos.
 
-// Importaciones de clases del proyecto
-import com.is1.proyecto.config.DBConfigSingleton; // Clase Singleton para la configuración de la base de datos.
-import com.is1.proyecto.models.User; // Modelo de ActiveJDBC que representa la tabla 'users'.
+import org.javalite.activejdbc.Base;
+import org.javalite.activejdbc.Model; // Utilidad para hashear y verificar contraseñas de forma segura.
+import org.mindrot.jbcrypt.BCrypt; // Representa un modelo de datos y el nombre de la vista a renderizar.
+
+import com.fasterxml.jackson.databind.ObjectMapper; // Motor de plantillas Mustache para Spark.
+import com.is1.proyecto.config.DBConfigSingleton;
+import com.is1.proyecto.models.Professor; // Para crear mapas de datos (modelos para las plantillas).
+import com.is1.proyecto.models.User;
+
+import spark.ModelAndView; // Interfaz Map, utilizada para Map.of() o HashMap.
+import static spark.Spark.after; // Clase Singleton para la configuración de la base de datos.
+import static spark.Spark.before; // Modelo de ActiveJDBC que representa la tabla 'users'.
+import static spark.Spark.get;
+import static spark.Spark.halt;
+import static spark.Spark.port;
+import static spark.Spark.post;
+import spark.template.mustache.MustacheTemplateEngine;
 
 
 /**
@@ -345,8 +347,22 @@ public class App {
                 res.redirect("/professor/new?message=Profesor agregado correctamente.");
                 return null;
             } catch (Exception e) {
+                String errorMsg = e.getMessage().toLowerCase();
+                String mensaje;
+
+                if (errorMsg.contains("professors.email")) {
+                    mensaje = "El email ya está registrado en la base de datos.";
+                } else if (errorMsg.contains("professors.dni")) {
+                    mensaje = "El DNI ya está registrado en la base de datos.";
+                } else {
+                    mensaje = "Error interno al agregar profesor.";
+                }
+
+                // Codificar el mensaje para evitar caracteres inválidos en la URL
+                String encodedMsg = URLEncoder.encode(mensaje, StandardCharsets.UTF_8);
+                res.redirect("/professor/new?error=" + encodedMsg);
+
                 System.err.println("Error al agregar profesor: " + e.getMessage());
-                res.redirect("/professor/new?error=Error interno al agregar profesor.");
                 return null;
             }
         });
