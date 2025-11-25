@@ -10,6 +10,7 @@ CREATE TABLE users (
 
 CREATE TABLE professors (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    dni int unique not null,
     name TEXT NOT NULL,
     email TEXT UNIQUE,
     department TEXT,
@@ -17,3 +18,4 @@ CREATE TABLE professors (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+

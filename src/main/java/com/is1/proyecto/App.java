@@ -1,28 +1,31 @@
 package com.is1.proyecto; // Define el paquete de la aplicación, debe coincidir con la estructura de carpetas.
 
-// Importaciones necesarias para la aplicación Spark
-import com.fasterxml.jackson.databind.ObjectMapper; // Utilidad para serializar/deserializar objetos Java a/desde JSON.
-import static spark.Spark.*; // Importa los métodos estáticos principales de Spark (get, post, before, after, etc.).
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList; // Utilidad para serializar/deserializar objetos Java a/desde JSON.
+import java.util.HashMap; // Importa los métodos estáticos principales de Spark (get, post, before, after, etc.).
+import java.util.List;
+import java.util.Map; // Clase central de ActiveJDBC para gestionar la conexión a la base de datos.
 
-// Importaciones específicas para ActiveJDBC (ORM para la base de datos)
-import com.is1.proyecto.models.Professor;
-import org.javalite.activejdbc.Base; // Clase central de ActiveJDBC para gestionar la conexión a la base de datos.
-import org.javalite.activejdbc.Model;
+import org.javalite.activejdbc.Base;
 import org.mindrot.jbcrypt.BCrypt; // Utilidad para hashear y verificar contraseñas de forma segura.
 
-// Importaciones de Spark para renderizado de plantillas
-import spark.ModelAndView; // Representa un modelo de datos y el nombre de la vista a renderizar.
-import spark.template.mustache.MustacheTemplateEngine; // Motor de plantillas Mustache para Spark.
+import com.fasterxml.jackson.databind.ObjectMapper; // Representa un modelo de datos y el nombre de la vista a renderizar.
+import com.is1.proyecto.config.DBConfigSingleton; // Motor de plantillas Mustache para Spark.
+import com.is1.proyecto.models.Professor;
+import com.is1.proyecto.models.User; // Para crear mapas de datos (modelos para las plantillas).
 
-// Importaciones estándar de Java
-import java.util.ArrayList;
-import java.util.HashMap; // Para crear mapas de datos (modelos para las plantillas).
-import java.util.List;
-import java.util.Map; // Interfaz Map, utilizada para Map.of() o HashMap.
-
-// Importaciones de clases del proyecto
-import com.is1.proyecto.config.DBConfigSingleton; // Clase Singleton para la configuración de la base de datos.
-import com.is1.proyecto.models.User; // Modelo de ActiveJDBC que representa la tabla 'users'.
+import spark.ModelAndView;
+import static spark.Spark.after; // Interfaz Map, utilizada para Map.of() o HashMap.
+import static spark.Spark.before; // Clase Singleton para la configuración de la base de datos.
+import static spark.Spark.exception; // Modelo de ActiveJDBC que representa la tabla 'users'.
+import static spark.Spark.get;
+import static spark.Spark.halt;
+import static spark.Spark.notFound;
+import static spark.Spark.port;
+import static spark.Spark.post;
+import static spark.Spark.staticFiles;
+import spark.template.mustache.MustacheTemplateEngine; //importamos lo que necesitamos para los archivos estaticos
 
 
 /**
@@ -40,6 +43,8 @@ public class App {
      * Aquí se configuran todas las rutas y filtros de Spark.
      */
     public static void main(String[] args) {
+        staticFiles.location("/static"); // agrego la conexion a los archivos estaticos
+
         port(8080); // Configura el puerto en el que la aplicación Spark escuchará las peticiones (por defecto es 4567).
 
         // Obtener la instancia única del singleton de configuración de la base de datos.
@@ -111,7 +116,7 @@ public class App {
             if (currentUsername == null || loggedIn == null || !loggedIn) {
                 System.out.println("DEBUG: Acceso no autorizado a /dashboard. Redirigiendo a /login.");
                 // Redirige al login con un mensaje de error.
-                res.redirect("/login?error=Debes iniciar sesión para acceder a esta página.");
+                res.redirect("/?error=Debes iniciar sesión para agregar profesores.");
                 return null; // Importante retornar null después de una redirección.
             }
 
@@ -275,7 +280,7 @@ public class App {
             try {
                 // --- Creación y guardado del usuario usando el modelo ActiveJDBC ---
                 User newUser = new User(); // Crea una nueva instancia de tu modelo User.
-                // ¡ADVERTENCIA DE SEGURIDAD CRÍTICA!
+                // ¡ADVERTENCIA DE SEGURIDAD CRITICA! 
                 // En una aplicación real, las contraseñas DEBEN ser hasheadas (ej. con BCrypt)
                 // ANTES de guardarse en la base de datos, NUNCA en texto plano.
                 // (Nota: El código original tenía la contraseña en texto plano aquí.
@@ -323,6 +328,7 @@ public class App {
         post("/professor/new", (req, res) -> {
             String name = req.queryParams("name");
             String email = req.queryParams("email");
+            String dni = req.queryParams("DNI");
             String department = req.queryParams("department");
             String phone = req.queryParams("phone");
 
@@ -331,9 +337,11 @@ public class App {
                 return null;
             }
 
+
             try {
                 Professor p = new Professor();
                 p.set("name", name);
+                p.set("DNI",dni);
                 p.set("email", email);
                 p.set("department", department);
                 p.set("phone", phone);
@@ -342,53 +350,120 @@ public class App {
                 res.redirect("/professor/new?message=Profesor agregado correctamente.");
                 return null;
             } catch (Exception e) {
+                String errorMsg = e.getMessage().toLowerCase();
+                String mensaje;
+
+                if (errorMsg.contains("professors.email")) {
+                    mensaje = "El email ya está registrado en la base de datos.";
+                } else if (errorMsg.contains("professors.dni")) {
+                    mensaje = "El DNI ya está registrado en la base de datos.";
+                } else {
+                    mensaje = "Error interno al agregar profesor.";
+                }
+
+                // Codificar el mensaje para evitar caracteres inválidos en la URL
+                String encodedMsg = URLEncoder.encode(mensaje, StandardCharsets.UTF_8);
+                res.redirect("/professor/new?error=" + encodedMsg);
+
                 System.err.println("Error al agregar profesor: " + e.getMessage());
-                res.redirect("/professor/new?error=Error interno al agregar profesor.");
                 return null;
             }
         });
 
         get("/professor/list", (req, res) -> {
-            Map<String, Object> model = new HashMap<>();
-
+    
+            // 1. DEFINIMOS EL TAMAÑO DE LA PAGINA
+            final int PAGE_SIZE = 5; // Mostrar 5 profesores por página
+        
+            // 2. OBTENEMOS LA PAGINA ACTUAL DESDE LA URL (ej: /professor/list?page=2)
+            int currentPage = 1;
             try {
-                Boolean loggedIn = req.session().attribute("loggedIn");
-                if (loggedIn == null || !loggedIn) {
-                    res.redirect("/login?error=Debes iniciar sesión para ver los profesores.");
-                    return null;
+                if (req.queryParams("page") != null) {
+                    currentPage = Integer.parseInt(req.queryParams("page"));
                 }
-
-                List<Model> rawProfessors = Professor.findAll(); // devuelve List<Model>
-                List<Map<String, Object>> professorsList = new ArrayList<>();
-
-                for (Model m : rawProfessors) {
-                    Professor p = (Professor) m; // cast seguro
-                    Map<String, Object> profData = new HashMap<>();
-                    profData.put("id", p.get("id"));
-                    profData.put("name", p.get("name"));
-                    profData.put("email", p.get("email"));
-                    profData.put("department", p.get("department"));
-                    profData.put("phone", p.get("phone"));
-                    professorsList.add(profData);
-                }
-
-                model.put("professors", professorsList);
-
-                // 👇 Log para ver si realmente trajo los datos
-                System.out.println("Profesores encontrados: " + professorsList.size());
-                professorsList.forEach(System.out::println);
-
-                return new ModelAndView(model, "professor_list.mustache");
-
-            } catch (Exception e) {
-                System.err.println("Error al listar profesores: " + e.getMessage());
-                e.printStackTrace();
-                res.redirect("/dashboard?error=No se pudieron cargar los profesores.");
-                return null;
+            } catch (NumberFormatException e) {
+                // Si el parámetro no es un número, nos quedamos en la página 1
+                currentPage = 1;
             }
+        
+            // 3. OBTENEMOS EL CONTEO TOTAL DE PROFESORES
+            // (Este método 'count()' depende de tu ORM/Base de datos)
+            long totalProfessors = Professor.count(); // o Profesor.count("1=1")
+        
+            // 4. CALCULAMOS EL TOTAL DE PAGINAS
+            // (usamos Math.ceil para redondear hacia arriba)
+            int totalPages = (int) Math.ceil((double) totalProfessors / PAGE_SIZE);
+        
+            // 5. CALCULAMOS EL 'OFFSET' (cuántos registros saltar)
+            int offset = (currentPage - 1) * PAGE_SIZE;
+        
+            // 6. OBTENEMOS SOLO LOS PROFESORES DE ESTA PAGINA
+            // (Esta sintaxis .limit().offset() es común en ORMs como ActiveJDBC)
+            // 6. OBTENEMOS SOLO LOS PROFESORES DE ESTA PAGINA
+            List<Map<String, Object>> professors = Professor.findAll()
+            .limit(PAGE_SIZE)
+            .offset(offset)
+            .toMaps();
+                                            
+        
+            // 7. PREPARAMOS LOS DATOS PARA MUSTACHE
+            Map<String, Object> model = new HashMap<>();
+            model.put("professors", professors); // La lista (ahora de 5 profes)
+            
+            // 8. CONSTRUIMOS LA LISTA DE PAGINAS PARA MUSTACHE
+            // (Mustache no puede hacer loops "for i=1 a 10", así que lo hacemos en Java)
+            List<Map<String, Object>> pages = new ArrayList<>();
+            for (int i = 1; i <= totalPages; i++) {
+                Map<String, Object> page = new HashMap<>();
+                page.put("number", i);
+                if (i == currentPage) {
+                    page.put("isCurrent", true); // Para la clase CSS ".active"
+                }
+                pages.add(page);
+            }
+            
+            
+            model.put("pages", pages); // La lista de números [1, 2, 3...]
+            
+            // 9. LÓGICA PARA "ANTERIOR" Y "SIGUIENTE"
+            if (currentPage > 1) {
+                model.put("hasPrevious", true);
+                model.put("previousPage", currentPage - 1);
+            }
+            if (currentPage < totalPages) {
+                model.put("hasNext", true);
+                model.put("nextPage", currentPage + 1);
+            }
+        
+            // 10. RENDERIZAMOS LA VISTA
+            return new ModelAndView(model, "professor_list.mustache");
+        
         }, new MustacheTemplateEngine());
 
+        
+        /**
+         * Manejador para errores 404 (Página no encontrada)
+         * Se activa cuando el usuario va a una URL que no existe.
+         */
+        notFound((req, res) -> {
+            Map<String, Object> model = new HashMap<>();
+            model.put("errorMessage", "No pudimos encontrar la página que buscabas (Error 404).");
+            res.status(404); // Establece el código de estado HTTP 404
+            
+            // Asegúrate de importar MustacheTemplateEngine y ModelAndView
+            return new MustacheTemplateEngine().render(new ModelAndView(model, "error.mustache"));
+        });
 
+        /**
+         * Manejador para errores 500 (Errores internos del servidor)
+         * Se activa si tu código Java lanza una excepción.
+         */
+        exception(Exception.class, (exception, req, res) -> {
+            Map<String, Object> model = new HashMap<>();
+            model.put("errorMessage", "Error interno del servidor: " + exception.getMessage());
+            res.status(500);
+            res.body(new MustacheTemplateEngine().render(new ModelAndView(model, "error.mustache")));
+        });
 
     } // Fin del método main
 } // Fin de la clase App
