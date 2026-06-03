@@ -17,7 +17,23 @@ public final class DBConfigSingleton {
     private DBConfigSingleton() {
         // Configuraciones para SQLite
         this.driver = "org.sqlite.JDBC"; // Driver JDBC para SQLite
-        this.dbUrl = System.getProperty("db.url", "jdbc:sqlite:./db/dev.db");
+        String dbPath = System.getProperty("db.url", "jdbc:sqlite:./db/dev.db");
+
+        // Asegurar que el directorio de la base de datos existe para SQLite
+        if (dbPath.startsWith("jdbc:sqlite:")) {
+            String sqlitePath = dbPath.substring("jdbc:sqlite:".length());
+            java.nio.file.Path dbFile = java.nio.file.Paths.get(sqlitePath);
+            java.nio.file.Path dir = dbFile.getParent();
+            if (dir != null) {
+                try {
+                    java.nio.file.Files.createDirectories(dir);
+                } catch (Exception e) {
+                    System.err.println("Error creando directorio de la base de datos: " + e.getMessage());
+                }
+            }
+        }
+
+        this.dbUrl = dbPath;
         this.user = ""; // SQLite no usa usuario
         this.pass = ""; // SQLite no usa contraseña
     }
